@@ -87,6 +87,7 @@ fi
 
 if [ "$IS_NIXOS" = "true" ]; then
   info "NixOS detected — using nix package manager, CLI mode only"
+  INSTALL_MODE="cli"
 fi
 
 # ─── Check curl ───────────────────────────────────────────
@@ -177,8 +178,4 @@ else
     INSTALL_MODE="gui"
 fi
 
-if [ "$IS_NIXOS" = "true" ]; then
-  exec bun run "$INSTALLER_DIR/main.ts" --mode cli
-else
-  exec bun run "$INSTALLER_DIR/main.ts" --mode "$INSTALL_MODE"
-fi
+exec bun run "$INSTALLER_DIR/main.ts" --mode "$INSTALL_MODE"
