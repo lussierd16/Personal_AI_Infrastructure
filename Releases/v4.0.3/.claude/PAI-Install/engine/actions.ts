@@ -152,6 +152,11 @@ function tryExec(cmd: string, timeout = 30000): string | null {
   }
 }
 
+function nixInstall(pkg: string, timeout: number): boolean {
+  if (tryExec(`nix profile install nixpkgs#${pkg}`, timeout) !== null) return true;
+  return tryExec(`nix-env -iA nixpkgs.${pkg}`, timeout) !== null;
+}
+
 // ─── User Context Migration (v2.5/v3.0 → v4.x) ─────────────────
 //
 // In v2.5–v3.0, user context (ABOUTME.md, TELOS/, CONTACTS.md, etc.)
@@ -315,13 +320,8 @@ export async function runPrerequisites(
     } else {
       // Linux
       if (det.os.isNixOS) {
-        const profileResult = tryExec("nix profile install nixpkgs#git", 180000);
-        if (profileResult !== null) {
-          await emit({ event: "message", content: "Git installed via nix profile." });
-        } else {
-          tryExec("nix-env -iA nixpkgs.git", 180000);
-          await emit({ event: "message", content: "Git installed via nix-env." });
-        }
+        const ok = nixInstall("git", 90000);
+        await emit({ event: "message", content: ok ? "Git installed via nix." : "Git install via nix failed. Please install manually: nix profile install nixpkgs#git" });
       } else {
         const pkgMgr = tryExec("which apt-get") ? "apt-get" : tryExec("which yum") ? "yum" : null;
         if (pkgMgr) {
@@ -363,15 +363,11 @@ export async function runPrerequisites(
   if (!det.tools.bun.installed) {
     await emit({ event: "progress", step: "prerequisites", percent: 40, detail: "Installing Bun..." });
     if (det.os.isNixOS) {
-      const profileResult = tryExec("nix profile install nixpkgs#bun", 300000);
-      if (profileResult !== null) {
-        await emit({ event: "message", content: "Bun installed via nix profile." });
-      } else {
-        tryExec("nix-env -iA nixpkgs.bun", 300000);
-        await emit({ event: "message", content: "Bun installed via nix-env." });
+      const ok = nixInstall("bun", 120000);
+      await emit({ event: "message", content: ok ? "Bun installed via nix." : "Bun install via nix failed. Please install manually: nix profile install nixpkgs#bun" });
+      if (ok) {
+        process.env.PATH = `${join(det.homeDir, ".nix-profile", "bin")}:${process.env.PATH}`;
       }
-      const nixBin = join(homedir(), ".nix-profile", "bin");
-      process.env.PATH = `${nixBin}:${process.env.PATH}`;
     } else {
       const result = tryExec("curl -fsSL https://bun.sh/install | bash", 60000);
       if (result !== null) {
@@ -390,7 +386,7 @@ export async function runPrerequisites(
     await emit({ event: "progress", step: "prerequisites", percent: 70, detail: "Installing Claude Code..." });
 
     if (det.os.isNixOS) {
-      const npmGlobal = join(homedir(), ".npm-global");
+      const npmGlobal = join(det.homeDir, ".npm-global");
       tryExec(`npm config set prefix ${npmGlobal}`);
       process.env.PATH = `${npmGlobal}/bin:${process.env.PATH}`;
     }
