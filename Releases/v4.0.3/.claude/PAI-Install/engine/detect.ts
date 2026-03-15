@@ -26,6 +26,7 @@ function detectOS(): DetectionResult["os"] {
 
   let version = "";
   let name = "";
+  let isNixOS = false;
 
   if (platform === "darwin") {
     const swVers = tryExec("sw_vers -productVersion");
@@ -35,9 +36,16 @@ function detectOS(): DetectionResult["os"] {
     const release = tryExec("cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"'");
     name = release || "Linux";
     version = tryExec("uname -r") || "";
+
+    if (existsSync("/etc/NIXOS")) {
+      isNixOS = true;
+    } else {
+      const nixCheck = tryExec("grep -q 'ID=nixos' /etc/os-release 2>/dev/null && echo yes");
+      if (nixCheck === "yes") isNixOS = true;
+    }
   }
 
-  return { platform, arch, version, name };
+  return { platform, arch, version, name, isNixOS };
 }
 
 function detectShell(): DetectionResult["shell"] {

@@ -11,6 +11,7 @@ export interface DetectionResult {
     arch: string;
     version: string;
     name: string; // e.g., "macOS 15.2" or "Ubuntu 24.04"
+    isNixOS: boolean;
   };
   shell: {
     name: string;
