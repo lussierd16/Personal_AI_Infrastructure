@@ -272,10 +272,20 @@ export async function runPrerequisites(
       }
     } else {
       // Linux
-      const pkgMgr = tryExec("which apt-get") ? "apt-get" : tryExec("which yum") ? "yum" : null;
-      if (pkgMgr) {
-        tryExec(`sudo ${pkgMgr} install -y git`, 120000);
-        await emit({ event: "message", content: `Git installed via ${pkgMgr}.` });
+      if (det.os.isNixOS) {
+        const profileResult = tryExec("nix profile install nixpkgs#git", 180000);
+        if (profileResult !== null) {
+          await emit({ event: "message", content: "Git installed via nix profile." });
+        } else {
+          tryExec("nix-env -iA nixpkgs.git", 180000);
+          await emit({ event: "message", content: "Git installed via nix-env." });
+        }
+      } else {
+        const pkgMgr = tryExec("which apt-get") ? "apt-get" : tryExec("which yum") ? "yum" : null;
+        if (pkgMgr) {
+          tryExec(`sudo ${pkgMgr} install -y git`, 120000);
+          await emit({ event: "message", content: `Git installed via ${pkgMgr}.` });
+        }
       }
     }
   } else {
@@ -285,12 +295,23 @@ export async function runPrerequisites(
   // Bun should already be installed by bootstrap script, but verify
   if (!det.tools.bun.installed) {
     await emit({ event: "progress", step: "prerequisites", percent: 40, detail: "Installing Bun..." });
-    const result = tryExec("curl -fsSL https://bun.sh/install | bash", 60000);
-    if (result !== null) {
-      // Update PATH
-      const bunBin = join(homedir(), ".bun", "bin");
-      process.env.PATH = `${bunBin}:${process.env.PATH}`;
-      await emit({ event: "message", content: "Bun installed successfully." });
+    if (det.os.isNixOS) {
+      const profileResult = tryExec("nix profile install nixpkgs#bun", 300000);
+      if (profileResult !== null) {
+        await emit({ event: "message", content: "Bun installed via nix profile." });
+      } else {
+        tryExec("nix-env -iA nixpkgs.bun", 300000);
+        await emit({ event: "message", content: "Bun installed via nix-env." });
+      }
+      const nixBin = join(homedir(), ".nix-profile", "bin");
+      process.env.PATH = `${nixBin}:${process.env.PATH}`;
+    } else {
+      const result = tryExec("curl -fsSL https://bun.sh/install | bash", 60000);
+      if (result !== null) {
+        const bunBin = join(homedir(), ".bun", "bin");
+        process.env.PATH = `${bunBin}:${process.env.PATH}`;
+        await emit({ event: "message", content: "Bun installed successfully." });
+      }
     }
   } else {
     await emit({ event: "progress", step: "prerequisites", percent: 50, detail: `Bun found: v${det.tools.bun.version}` });
@@ -299,6 +320,12 @@ export async function runPrerequisites(
   // Install Claude Code if missing
   if (!det.tools.claude.installed) {
     await emit({ event: "progress", step: "prerequisites", percent: 70, detail: "Installing Claude Code..." });
+
+    if (det.os.isNixOS) {
+      const npmGlobal = join(homedir(), ".npm-global");
+      tryExec(`npm config set prefix ${npmGlobal}`);
+      process.env.PATH = `${npmGlobal}/bin:${process.env.PATH}`;
+    }
 
     // Try npm first (most common), then bun
     const npmResult = tryExec("npm install -g @anthropic-ai/claude-code", 120000);

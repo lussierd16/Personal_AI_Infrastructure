@@ -77,6 +77,18 @@ case "$OS" in
   *)      error "Unsupported platform: $OS"; exit 1 ;;
 esac
 
+# ─── NixOS Detection ──────────────────────────────────────
+IS_NIXOS=false
+if [ -f "/etc/NIXOS" ]; then
+  IS_NIXOS=true
+elif grep -q "ID=nixos" /etc/os-release 2>/dev/null; then
+  IS_NIXOS=true
+fi
+
+if [ "$IS_NIXOS" = "true" ]; then
+  info "NixOS detected — using nix package manager, CLI mode only"
+fi
+
 # ─── Check curl ───────────────────────────────────────────
 if ! command -v curl &>/dev/null; then
   error "curl is required but not found."
@@ -119,10 +131,13 @@ if command -v bun &>/dev/null; then
   success "Bun found: v$(bun --version 2>/dev/null || echo 'unknown')"
 else
   info "Installing Bun runtime..."
-  curl -fsSL https://bun.sh/install | bash 2>/dev/null
-
-  # Add to PATH for this session
-  export PATH="$HOME/.bun/bin:$PATH"
+  if [ "$IS_NIXOS" = "true" ]; then
+    nix profile install nixpkgs#bun 2>/dev/null || nix-env -iA nixpkgs.bun 2>/dev/null || true
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+  else
+    curl -fsSL https://bun.sh/install | bash 2>/dev/null
+    export PATH="$HOME/.bun/bin:$PATH"
+  fi
 
   if command -v bun &>/dev/null; then
     success "Bun installed: v$(bun --version 2>/dev/null || echo 'unknown')"
@@ -162,4 +177,8 @@ else
     INSTALL_MODE="gui"
 fi
 
-exec bun run "$INSTALLER_DIR/main.ts" --mode "$INSTALL_MODE"
+if [ "$IS_NIXOS" = "true" ]; then
+  exec bun run "$INSTALLER_DIR/main.ts" --mode cli
+else
+  exec bun run "$INSTALLER_DIR/main.ts" --mode "$INSTALL_MODE"
+fi
