@@ -781,16 +781,39 @@ export async function runConfiguration(
   const aliasLine = `alias pai='bun ${join(paiDir, "PAI", "Tools", "pai.ts")}'`;
   const marker = "# PAI alias";
 
-  if (existsSync(rcPath)) {
-    let content = readFileSync(rcPath, "utf-8");
-    // Remove any existing pai alias (old CORE or PAI paths, any marker variant)
-    content = content.replace(/^#\s*(?:PAI|CORE)\s*alias.*\n.*alias pai=.*\n?/gm, "");
-    content = content.replace(/^alias pai=.*\n?/gm, "");
-    // Add fresh alias
-    content = content.trimEnd() + `\n\n${marker}\n${aliasLine}\n`;
-    writeFileSync(rcPath, content);
-  } else {
-    writeFileSync(rcPath, `${marker}\n${aliasLine}\n`);
+  // Check if the rc file is managed (e.g. home-manager symlink into /nix/store)
+  const isManagedRc = existsSync(rcPath) && lstatSync(rcPath).isSymbolicLink();
+
+  // Determine the actual writable target: fall back to ~/.zshenv if rc is managed
+  let writeTarget = rcPath;
+  if (isManagedRc) {
+    // ~/.zshenv is sourced by all zsh invocations and is not managed by home-manager
+    writeTarget = join(homedir(), ".zshenv");
+    await emit({ event: "progress", step: "configuration", percent: 80, detail: `${rcFile} is managed (home-manager?), writing alias to .zshenv instead...` });
+  }
+
+  // Helper to write the alias block to a given file path
+  function writeAliasTo(filePath: string): boolean {
+    try {
+      if (existsSync(filePath)) {
+        let content = readFileSync(filePath, "utf-8");
+        // Remove any existing pai alias (old CORE or PAI paths, any marker variant)
+        content = content.replace(/^#\s*(?:PAI|CORE)\s*alias.*\n.*alias pai=.*\n?/gm, "");
+        content = content.replace(/^alias pai=.*\n?/gm, "");
+        content = content.trimEnd() + `\n\n${marker}\n${aliasLine}\n`;
+        writeFileSync(filePath, content);
+      } else {
+        writeFileSync(filePath, `${marker}\n${aliasLine}\n`);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  if (!writeAliasTo(writeTarget)) {
+    // Both targets failed — surface a clear manual instruction
+    await emit({ event: "progress", step: "configuration", percent: 80, detail: `Could not write shell alias automatically. Add this line to your shell config manually:\n  ${aliasLine}` });
   }
 
   // Fix permissions

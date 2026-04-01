@@ -167,20 +167,30 @@ export async function runValidation(state: InstallState): Promise<ValidationChec
     critical: false,
   });
 
-  // 8. Zsh alias configured
-  const zshrcPath = join(homedir(), ".zshrc");
+  // 8. Zsh alias configured — check .zshrc first, fall back to .zshenv (home-manager systems)
+  const aliasFiles = [
+    { path: join(homedir(), ".zshrc"), label: ".zshrc" },
+    { path: join(homedir(), ".zshenv"), label: ".zshenv" },
+  ];
   let aliasConfigured = false;
-  if (existsSync(zshrcPath)) {
-    try {
-      const zshContent = readFileSync(zshrcPath, "utf-8");
-      aliasConfigured = zshContent.includes("# PAI alias") && zshContent.includes("alias pai=");
-    } catch {}
+  let aliasLocation = "";
+  for (const { path: ap, label } of aliasFiles) {
+    if (existsSync(ap)) {
+      try {
+        const content = readFileSync(ap, "utf-8");
+        if (content.includes("# PAI alias") && content.includes("alias pai=")) {
+          aliasConfigured = true;
+          aliasLocation = label;
+          break;
+        }
+      } catch {}
+    }
   }
 
   checks.push({
     name: "Shell alias (pai)",
     passed: aliasConfigured,
-    detail: aliasConfigured ? "Configured in .zshrc" : "Not found — run: source ~/.zshrc",
+    detail: aliasConfigured ? `Configured in ~/${aliasLocation}` : "Not found — add alias manually or re-run installer",
     critical: true,
   });
 
